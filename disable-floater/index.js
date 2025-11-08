@@ -2,13 +2,15 @@
 // @name         悬浮元素控制器
 // @namespace    http://tampermonkey.net/
 // @version      1.1
-// @description  手动控制浏览器插件的悬浮元素 - 使用Web Components封装，避免样式冲突
+// @description  手动控制浏览器插件的悬浮元素，避免影响网页浏览，插件使用Web Components封装，不会与其它内容冲突
 // @author       Marek Qin
 // @match        *://*/*
 // @icon         https://raw.githubusercontent.com/qinhua/tampermonkey-userscripts/refs/heads/main/disable-floater/logo.png
 // @grant        GM_addStyle
 // @noframes
 // @license      MIT
+// @downloadURL https://raw.githubusercontent.com/qinhua/tampermonkey-userscripts/refs/heads/main/disable-floater/index.js
+// @updateURL https://raw.githubusercontent.com/qinhua/tampermonkey-userscripts/refs/heads/main/disable-floater/index.js
 // ==/UserScript==
 
 (function () {
