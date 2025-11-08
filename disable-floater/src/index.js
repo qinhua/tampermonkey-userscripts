@@ -2,7 +2,7 @@
 // @name         悬浮元素控制器
 // @namespace    https://github.com/qinhua/tampermonkey-userscripts/tree/main/disable-floater
 // @version      1.1
-// @description  手动控制浏览器插件的悬浮元素，避免影响网页浏览，插件使用Web Components封装，不会与其它内容冲突
+// @description  手动控制浏览器插件的悬浮元素，避免影响网页浏览
 // @author       Marek Qin
 // @match        *://*/*
 // @icon         https://raw.githubusercontent.com/qinhua/tampermonkey-userscripts/refs/heads/main/disable-floater/logo.png
@@ -22,22 +22,16 @@
     return;
   }
 
-  // 检查组件是否已定义，避免重复定义
-  if (customElements.get("disable-floater")) {
-    // 如果组件已定义，检查是否已有实例存在
-    const existingInstance = document.querySelector("disable-floater");
-    if (existingInstance) {
-      return;
-    }
+  // 检查是否已经存在实例，避免重复创建
+  if (document.getElementById("disable-floater-container")) {
+    return;
   }
 
-  // 定义 DisableFloater Web Component
-  class DisableFloater extends HTMLElement {
-    constructor() {
-      super();
-
-      // 创建 Shadow DOM 以隔离样式
-      this.attachShadow({ mode: "open" });
+  // 定义 DisableFloater 控制器类
+  class DisableFloater {
+    constructor(container) {
+      // 保存容器元素
+      this.container = container;
 
       // 定义要隐藏的悬浮元素选择器
       this.hideSelectors = [
@@ -63,6 +57,20 @@
 
       // MutationObserver 用于监听动态添加的图片
       this.imageObserver = null;
+
+      // 定义需要移除的鼠标事件类型（统一管理，避免重复定义）
+      this.mouseEvents = [
+        "mouseover",
+        "mouseenter",
+        "mouseleave",
+        "mousemove",
+        "mouseout",
+        "pointerover",
+        "pointerenter",
+        "pointerleave",
+        "pointermove",
+        "pointerout"
+      ];
 
       // 初始化组件
       this.init();
@@ -94,95 +102,107 @@
       }
     }
 
-    // 渲染组件内容到 Shadow DOM
+    // 渲染组件内容到普通 DOM
     render() {
-      // 在 Shadow DOM 中定义样式，避免影响页面其他元素
-      this.shadowRoot.innerHTML = `
-        <style>
-          .control-panel {
-            position: fixed;
-            right: 2px;
-            bottom: 2px;
-            padding: 4px;
-            z-index: 999999;
-            display: flex;
-            flex-direction: row;
-            justify-content: center;
-            align-items: center;
-            gap: 4px;
-            background: #2c3e50;
-            border-radius: 6px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            transition: all 0.3s ease;
-            font-family: Arial, sans-serif;
-          }
-          .control-panel:hover {
-            right: 5px;
-          }
-          .control-btn {
-            display: block;
-            cursor: pointer;
-            width: 24px;
-            height: 24px;
-            color: white;
-            font-size: 12px;
-            border: none;
-            border-radius: 4px;
-            background: #34495e;
-            transition: all 0.2s ease;
-          }
-          .control-btn:hover {
-            background: #1abc9c;
-            transform: scale(1.1);
-          }
-          .control-btn:active {
-            transform: scale(0.9);
-          }
-          
-          /* 反馈信息样式 */
-          .feedback {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #27ae60;
-            color: white;
-            padding: 12px 20px;
-            border-radius: 8px;
-            z-index: 999999;
-            font-size: 14px;
-            font-weight: bold;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            animation: fadeInOut 2s ease-in-out;
-            font-family: Arial, sans-serif;
-          }
-          
-          @keyframes fadeInOut {
-            0% { opacity: 0; transform: translateY(-20px); }
-            20% { opacity: 1; transform: translateY(0); }
-            80% { opacity: 1; transform: translateY(0); }
-            100% { opacity: 0; transform: translateY(-20px); }
-          }
-          @keyframes fadeOut {
-            to { opacity: 0; }
-          }
-        </style>
-        
-        <div class="control-panel">
-          <button class="control-btn" id="btn-hide" title="隐藏悬浮元素">🚫</button>
-          <button class="control-btn" id="btn-temp-hide" title="临时隐藏5秒">⏱️</button>
-          <button class="control-btn" id="btn-show" title="显示悬浮元素">👁️</button>
-          <button class="control-btn" id="btn-toggle-mouseover" title="移除图片悬浮事件">🌠</button>
-        </div>
+      // 注入样式到页面
+      this.injectStyles();
+
+      // 创建控制面板内容
+      this.container.innerHTML = `
+        <button class="disable-floater-btn" id="btn-hide" title="隐藏悬浮元素">🚫</button>
+        <button class="disable-floater-btn" id="btn-temp-hide" title="临时隐藏5秒">⏱️</button>
+        <button class="disable-floater-btn" id="btn-show" title="显示悬浮元素">👁️</button>
+        <button class="disable-floater-btn" id="btn-toggle-mouseover" title="移除图片悬浮事件">🌠</button>
       `;
+    }
+
+    // 注入样式到页面
+    injectStyles() {
+      // 定义样式内容
+      const styles = `
+        #disable-floater-container {
+          position: fixed;
+          right: 2px;
+          bottom: 2px;
+          padding: 4px;
+          z-index: 999999;
+          display: flex;
+          flex-direction: row;
+          justify-content: center;
+          align-items: center;
+          gap: 4px;
+          background: #2c3e50;
+          border-radius: 6px;
+          box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+          transition: all 0.3s ease;
+          font-family: Arial, sans-serif;
+        }
+        #disable-floater-container:hover {
+          right: 5px;
+        }
+        .disable-floater-btn {
+          display: block;
+          cursor: pointer;
+          width: 24px;
+          height: 24px;
+          color: white;
+          font-size: 12px;
+          border: none;
+          border-radius: 4px;
+          background: #34495e;
+          transition: all 0.2s ease;
+        }
+        .disable-floater-btn:hover {
+          background: #1abc9c;
+          transform: scale(1.1);
+        }
+        .disable-floater-btn:active {
+          transform: scale(0.9);
+        }
+        .disable-floater-feedback {
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          background: #27ae60;
+          color: white;
+          padding: 12px 20px;
+          border-radius: 8px;
+          z-index: 999999;
+          font-size: 14px;
+          font-weight: bold;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+          animation: disableFloaterFadeInOut 2s ease-in-out;
+          font-family: Arial, sans-serif;
+        }
+        @keyframes disableFloaterFadeInOut {
+          0% { opacity: 0; transform: translateY(-20px); }
+          20% { opacity: 1; transform: translateY(0); }
+          80% { opacity: 1; transform: translateY(0); }
+          100% { opacity: 0; transform: translateY(-20px); }
+        }
+        @keyframes disableFloaterFadeOut {
+          to { opacity: 0; }
+        }
+      `;
+
+      // 使用 GM_addStyle 或 style 标签注入样式
+      if (typeof GM_addStyle !== "undefined") {
+        GM_addStyle(styles);
+      } else {
+        // 如果 GM_addStyle 不可用，使用 style 标签
+        const style = document.createElement("style");
+        style.textContent = styles;
+        document.head.appendChild(style);
+      }
     }
 
     // 绑定事件监听器
     bindEvents() {
-      const hideBtn = this.shadowRoot.getElementById("btn-hide");
-      const tempHideBtn = this.shadowRoot.getElementById("btn-temp-hide");
-      const showBtn = this.shadowRoot.getElementById("btn-show");
-      const toggleMouseoverBtn = this.shadowRoot.getElementById(
-        "btn-toggle-mouseover"
+      const hideBtn = this.container.querySelector("#btn-hide");
+      const tempHideBtn = this.container.querySelector("#btn-temp-hide");
+      const showBtn = this.container.querySelector("#btn-show");
+      const toggleMouseoverBtn = this.container.querySelector(
+        "#btn-toggle-mouseover"
       );
 
       if (hideBtn) {
@@ -257,6 +277,23 @@
     }
 
     /**
+     * 清除图片的所有鼠标事件处理器
+     * @param {HTMLImageElement} img - 图片元素
+     */
+    clearImageEventHandlers(img) {
+      img.onmouseover = null;
+      img.onmouseenter = null;
+      img.onmouseleave = null;
+      img.onmousemove = null;
+      img.onmouseout = null;
+      img.onpointerover = null;
+      img.onpointerenter = null;
+      img.onpointerleave = null;
+      img.onpointermove = null;
+      img.onpointerout = null;
+    }
+
+    /**
      * 移除所有图片的悬浮事件（全面版本）
      * 包括：mouseover, mouseenter, mouseleave, mousemove, pointerover, pointerenter, pointermove
      */
@@ -264,20 +301,6 @@
       try {
         const images = document.querySelectorAll("img");
         let processedCount = 0;
-
-        // 需要移除的所有鼠标事件类型
-        const mouseEvents = [
-          "mouseover",
-          "mouseenter",
-          "mouseleave",
-          "mousemove",
-          "mouseout",
-          "pointerover",
-          "pointerenter",
-          "pointerleave",
-          "pointermove",
-          "pointerout"
-        ];
 
         images.forEach((img) => {
           // 保存原始的属性和事件监听器
@@ -302,16 +325,7 @@
           img.style.pointerEvents = "none";
 
           // 方法2: 清除所有内联事件处理器
-          img.onmouseover = null;
-          img.onmouseenter = null;
-          img.onmouseleave = null;
-          img.onmousemove = null;
-          img.onmouseout = null;
-          img.onpointerover = null;
-          img.onpointerenter = null;
-          img.onpointerleave = null;
-          img.onpointermove = null;
-          img.onpointerout = null;
+          this.clearImageEventHandlers(img);
 
           // 方法3: 在捕获阶段阻止所有鼠标事件（更彻底）
           const stopEvent = (e) => {
@@ -321,12 +335,15 @@
           };
 
           // 为每个事件类型添加捕获阶段的拦截器
-          mouseEvents.forEach((eventType) => {
+          this.mouseEvents.forEach((eventType) => {
             img.addEventListener(eventType, stopEvent, true); // true = 捕获阶段
           });
 
           // 保存拦截器引用以便后续移除
-          this.eventInterceptors.set(img, { stopEvent, mouseEvents });
+          this.eventInterceptors.set(img, {
+            stopEvent,
+            mouseEvents: this.mouseEvents
+          });
 
           // 添加标记
           img.dataset.mouseoverRemoved = "true";
@@ -389,19 +406,6 @@
         return;
       }
 
-      const mouseEvents = [
-        "mouseover",
-        "mouseenter",
-        "mouseleave",
-        "mousemove",
-        "mouseout",
-        "pointerover",
-        "pointerenter",
-        "pointerleave",
-        "pointermove",
-        "pointerout"
-      ];
-
       // 保存原始数据
       if (!this.imageOriginalStyles.has(img)) {
         this.imageOriginalStyles.set(img, {
@@ -416,16 +420,7 @@
 
       // 阻止所有鼠标事件
       img.style.pointerEvents = "none";
-      img.onmouseover = null;
-      img.onmouseenter = null;
-      img.onmouseleave = null;
-      img.onmousemove = null;
-      img.onmouseout = null;
-      img.onpointerover = null;
-      img.onpointerenter = null;
-      img.onpointerleave = null;
-      img.onpointermove = null;
-      img.onpointerout = null;
+      this.clearImageEventHandlers(img);
 
       const stopEvent = (e) => {
         e.stopPropagation();
@@ -433,11 +428,14 @@
         e.preventDefault();
       };
 
-      mouseEvents.forEach((eventType) => {
+      this.mouseEvents.forEach((eventType) => {
         img.addEventListener(eventType, stopEvent, true);
       });
 
-      this.eventInterceptors.set(img, { stopEvent, mouseEvents });
+      this.eventInterceptors.set(img, {
+        stopEvent,
+        mouseEvents: this.mouseEvents
+      });
       img.dataset.mouseoverRemoved = "true";
     }
 
@@ -667,34 +665,19 @@
     showFeedback(message) {
       try {
         // 移除旧的反馈
-        const oldFeedback = document.getElementById("floatFeedback");
+        const oldFeedback = document.getElementById("disable-floater-feedback");
         if (oldFeedback) oldFeedback.remove();
 
         const feedback = document.createElement("div");
-        feedback.id = "floatFeedback";
-        feedback.className = "feedback";
+        feedback.id = "disable-floater-feedback";
+        feedback.className = "disable-floater-feedback";
         feedback.textContent = message;
-        feedback.style.cssText = `
-          position: fixed;
-          top: 20px;
-          right: 20px;
-          background: #27ae60;
-          color: white;
-          padding: 12px 20px;
-          border-radius: 8px;
-          z-index: 999999;
-          font-size: 14px;
-          font-weight: bold;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-          animation: fadeInOut 2s ease-in-out;
-          font-family: Arial, sans-serif;
-        `;
 
         document.body.appendChild(feedback);
 
         setTimeout(() => {
           if (feedback && feedback.style) {
-            feedback.style.animation = "fadeOut 0.5s ease-in-out";
+            feedback.style.animation = "disableFloaterFadeOut 0.5s ease-in-out";
             setTimeout(() => {
               if (feedback.parentNode) {
                 feedback.parentNode.removeChild(feedback);
@@ -708,90 +691,64 @@
     }
   }
 
-  // 定义自定义元素，添加错误处理
-  try {
-    customElements.define("disable-floater", DisableFloater);
-  } catch (e) {
-    console.error("定义自定义元素时出错:", e);
-    // 如果定义失败，尝试使用备用方案
-    if (!customElements.get("disable-floater")) {
-      console.warn("无法定义自定义元素，使用备用方案");
-      return;
-    }
+  // 在DOM加载完成后创建并插入组件
+  // 使用全局标记确保只执行一次
+  if (window.__disableFloaterInitialized) {
+    return;
   }
 
-  // 在DOM加载完成后将组件插入到页面末尾
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", insertFloaterComponent);
-  } else {
-    // 使用 setTimeout 确保自定义元素已完全注册
-    setTimeout(insertFloaterComponent, 0);
-  }
-
-  function insertFloaterComponent() {
+  function initDisableFloater() {
     try {
-      // 检查自定义元素是否已定义
-      if (!customElements.get("disable-floater")) {
-        console.warn("自定义元素未定义，延迟创建");
-        setTimeout(insertFloaterComponent, 100);
+      // 检查是否已经存在实例或正在初始化
+      if (
+        window.__disableFloaterInitialized ||
+        document.getElementById("disable-floater-container")
+      ) {
         return;
       }
 
-      // 检查是否已经存在组件实例，避免重复创建
-      const existingInstance = document.querySelector("disable-floater");
-      if (existingInstance) {
-        console.log("DisableFloater 组件实例已存在，跳过创建");
-        return;
-      }
+      // 标记为正在初始化
+      window.__disableFloaterInitialized = true;
 
-      // 创建组件实例 - 使用更安全的方式
-      let floater;
-      try {
-        // 方法1: 标准方式创建（推荐）
-        // 在 YouTube 的代理环境中，可能需要等待一下
-        floater = document.createElement("disable-floater");
-      } catch (e1) {
-        console.warn("标准方式创建失败，尝试备用方式:", e1);
-        // 如果标准方式失败，可能是代理环境的问题
-        // 等待一下再试，或者使用其他方法
-        setTimeout(() => {
-          try {
-            const retryFloater = document.createElement("disable-floater");
-            if (retryFloater && document.documentElement) {
-              document.documentElement.appendChild(retryFloater);
-            }
-          } catch (retryError) {
-            console.error("重试创建元素也失败:", retryError);
-          }
-        }, 100);
-        return; // 先返回，让重试逻辑处理
-      }
+      // 创建容器元素
+      const container = document.createElement("div");
+      container.id = "disable-floater-container";
 
-      // 确保元素已正确创建
-      if (!floater || !(floater instanceof HTMLElement)) {
-        console.error("创建的元素无效");
-        return;
-      }
+      // 创建控制器实例
+      const controller = new DisableFloater(container);
 
-      // 插入到HTML标签的最末尾
-      if (document.documentElement) {
-        document.documentElement.appendChild(floater);
-      } else if (document.body) {
-        document.body.appendChild(floater);
+      // 插入到页面
+      if (document.body) {
+        document.body.appendChild(container);
+      } else if (document.documentElement) {
+        document.documentElement.appendChild(container);
       } else {
-        // 如果 documentElement 和 body 都不存在，等待一下再试
-        setTimeout(insertFloaterComponent, 100);
+        // 如果 body 和 documentElement 都不存在，等待一下再试
+        window.__disableFloaterInitialized = false; // 重置标记，允许重试
+        setTimeout(initDisableFloater, 100);
+        return;
       }
+
+      // 注意：不需要在这里打印日志，因为 init() 方法中已经打印了
     } catch (e) {
-      console.error("插入组件时出错:", e);
-      // 如果出错，尝试延迟重试
+      console.error("初始化 DisableFloater 时出错:", e);
+      // 如果出错，重置标记并尝试延迟重试
+      window.__disableFloaterInitialized = false;
       setTimeout(() => {
         try {
-          insertFloaterComponent();
+          initDisableFloater();
         } catch (retryError) {
-          console.error("重试插入组件时出错:", retryError);
+          console.error("重试初始化时出错:", retryError);
         }
       }, 500);
     }
+  }
+
+  // 在DOM加载完成后初始化
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initDisableFloater);
+  } else {
+    // DOM 已经加载完成，直接初始化
+    setTimeout(initDisableFloater, 0);
   }
 })();
