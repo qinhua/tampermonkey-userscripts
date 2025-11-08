@@ -7,15 +7,25 @@
 // @match        *://*/*
 // @icon         https://raw.githubusercontent.com/qinhua/tampermonkey-userscripts/refs/heads/main/disable-floater/logo.png
 // @grant        GM_addStyle
+// @noframes
 // @license      MIT
 // ==/UserScript==
 
 (function () {
   "use strict";
 
+  // 检查是否在 iframe 中运行（双重保险）
+  if (window.self !== window.top) {
+    return;
+  }
+
   // 检查组件是否已定义，避免重复定义
   if (customElements.get("disable-floater")) {
-    return;
+    // 如果组件已定义，检查是否已有实例存在
+    const existingInstance = document.querySelector("disable-floater");
+    if (existingInstance) {
+      return;
+    }
   }
 
   // 定义 DisableFloater Web Component
@@ -39,17 +49,29 @@
       // 存储被隐藏元素的引用
       this.hiddenElements = new Map();
 
-      // 存储图片的原始样式
+      // 存储图片的原始样式和事件监听器
       this.imageOriginalStyles = new Map();
+
+      // 存储事件拦截器引用，用于移除
+      this.eventInterceptors = new Map();
 
       // 标记是否已移除图片的悬浮事件
       this.imageMouseoverRemoved = false;
+
+      // MutationObserver 用于监听动态添加的图片
+      this.imageObserver = null;
 
       // 初始化组件
       this.init();
     }
 
     init() {
+      // 防止重复初始化
+      if (this._initialized) {
+        return;
+      }
+      this._initialized = true;
+
       this.createTrustedPolicy();
       this.render();
       this.bindEvents();
@@ -76,12 +98,12 @@
         <style>
           .control-panel {
             position: fixed;
-            left: 2px;
+            right: 2px;
             bottom: 2px;
             padding: 4px;
             z-index: 999999;
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
             justify-content: center;
             align-items: center;
             gap: 4px;
@@ -92,7 +114,7 @@
             font-family: Arial, sans-serif;
           }
           .control-panel:hover {
-            left: 5px;
+            right: 5px;
           }
           .control-btn {
             display: block;
@@ -232,57 +254,227 @@
     }
 
     /**
-     * 移除所有图片的悬浮事件
+     * 移除所有图片的悬浮事件（全面版本）
+     * 包括：mouseover, mouseenter, mouseleave, mousemove, pointerover, pointerenter, pointermove
      */
-    removeAllImageMouseover() {
+    removeAllImageMouseover(showToast = true) {
       try {
         const images = document.querySelectorAll("img");
         let processedCount = 0;
 
+        // 需要移除的所有鼠标事件类型
+        const mouseEvents = [
+          "mouseover",
+          "mouseenter",
+          "mouseleave",
+          "mousemove",
+          "mouseout",
+          "pointerover",
+          "pointerenter",
+          "pointerleave",
+          "pointermove",
+          "pointerout"
+        ];
+
         images.forEach((img) => {
-          // 保存原始的onmouseover属性和style属性
+          // 保存原始的属性和事件监听器
           if (!this.imageOriginalStyles.has(img)) {
-            this.imageOriginalStyles.set(img, {
+            const originalData = {
               onmouseover: img.onmouseover,
+              onmouseenter: img.onmouseenter,
+              onmouseleave: img.onmouseleave,
+              onmousemove: img.onmousemove,
               pointerEvents: img.style.pointerEvents,
-              style: img.getAttribute("style")
-            });
+              style: img.getAttribute("style"),
+              eventListeners: []
+            };
+
+            // 尝试获取所有事件监听器（如果可能）
+            // 注意：浏览器通常不允许直接获取事件监听器列表
+            // 但我们可以保存一个标记，表示我们已经处理过这个元素
+            this.imageOriginalStyles.set(img, originalData);
           }
 
-          // 设置pointer-events为none来阻止所有鼠标事件
+          // 方法1: 设置 pointer-events 为 none 来阻止所有鼠标事件
           img.style.pointerEvents = "none";
 
-          // 清除onmouseover事件处理器
+          // 方法2: 清除所有内联事件处理器
           img.onmouseover = null;
+          img.onmouseenter = null;
+          img.onmouseleave = null;
+          img.onmousemove = null;
+          img.onmouseout = null;
+          img.onpointerover = null;
+          img.onpointerenter = null;
+          img.onpointerleave = null;
+          img.onpointermove = null;
+          img.onpointerout = null;
 
-          // 添加一个自定义属性标记这个图片的事件已被移除
+          // 方法3: 在捕获阶段阻止所有鼠标事件（更彻底）
+          const stopEvent = (e) => {
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            e.preventDefault();
+          };
+
+          // 为每个事件类型添加捕获阶段的拦截器
+          mouseEvents.forEach((eventType) => {
+            img.addEventListener(eventType, stopEvent, true); // true = 捕获阶段
+          });
+
+          // 保存拦截器引用以便后续移除
+          this.eventInterceptors.set(img, { stopEvent, mouseEvents });
+
+          // 添加标记
           img.dataset.mouseoverRemoved = "true";
 
           processedCount++;
         });
 
+        // 启动 MutationObserver 监听动态添加的图片
+        this.startImageObserver();
+
         this.imageMouseoverRemoved = true;
-        this.showFeedback(`🌠 已移除 ${processedCount} 个图片的悬浮事件`);
+        showToast &&
+          this.showFeedback(`🌠 已移除 ${processedCount} 个图片的悬浮事件`);
       } catch (e) {
         console.error("移除图片悬浮事件时出错:", e);
-        this.showFeedback(
-          `⚠️ 移除图片悬浮事件时出现错误: ${e.message || "未知错误"}`
-        );
+        showToast &&
+          this.showFeedback(
+            `⚠️ 移除图片悬浮事件时出现错误: ${e.message || "未知错误"}`
+          );
+      }
+    }
+
+    /**
+     * 启动 MutationObserver 监听动态添加的图片
+     */
+    startImageObserver() {
+      if (this.imageObserver) {
+        return; // 已经启动
+      }
+
+      this.imageObserver = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+          mutation.addedNodes.forEach((node) => {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              // 检查新添加的节点是否是图片
+              if (node.tagName === "IMG" && !node.dataset.mouseoverRemoved) {
+                this.processNewImage(node);
+              }
+              // 检查新添加的节点内部是否有图片
+              const images = node.querySelectorAll
+                ? node.querySelectorAll("img:not([data-mouseover-removed])")
+                : [];
+              images.forEach((img) => this.processNewImage(img));
+            }
+          });
+        });
+      });
+
+      this.imageObserver.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+    }
+
+    /**
+     * 处理新添加的图片
+     */
+    processNewImage(img) {
+      if (!img || img.dataset.mouseoverRemoved) {
+        return;
+      }
+
+      const mouseEvents = [
+        "mouseover",
+        "mouseenter",
+        "mouseleave",
+        "mousemove",
+        "mouseout",
+        "pointerover",
+        "pointerenter",
+        "pointerleave",
+        "pointermove",
+        "pointerout"
+      ];
+
+      // 保存原始数据
+      if (!this.imageOriginalStyles.has(img)) {
+        this.imageOriginalStyles.set(img, {
+          onmouseover: img.onmouseover,
+          onmouseenter: img.onmouseenter,
+          onmouseleave: img.onmouseleave,
+          onmousemove: img.onmousemove,
+          pointerEvents: img.style.pointerEvents,
+          style: img.getAttribute("style")
+        });
+      }
+
+      // 阻止所有鼠标事件
+      img.style.pointerEvents = "none";
+      img.onmouseover = null;
+      img.onmouseenter = null;
+      img.onmouseleave = null;
+      img.onmousemove = null;
+      img.onmouseout = null;
+      img.onpointerover = null;
+      img.onpointerenter = null;
+      img.onpointerleave = null;
+      img.onpointermove = null;
+      img.onpointerout = null;
+
+      const stopEvent = (e) => {
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        e.preventDefault();
+      };
+
+      mouseEvents.forEach((eventType) => {
+        img.addEventListener(eventType, stopEvent, true);
+      });
+
+      this.eventInterceptors.set(img, { stopEvent, mouseEvents });
+      img.dataset.mouseoverRemoved = "true";
+    }
+
+    /**
+     * 停止 MutationObserver
+     */
+    stopImageObserver() {
+      if (this.imageObserver) {
+        this.imageObserver.disconnect();
+        this.imageObserver = null;
       }
     }
 
     /**
      * 恢复所有图片的悬浮事件
      */
-    restoreAllImageMouseover() {
+    restoreAllImageMouseover(showToast = true) {
       try {
+        // 停止 MutationObserver
+        this.stopImageObserver();
+
         let processedCount = 0;
 
         // 恢复所有保存的图片状态
         for (const [img, originalData] of this.imageOriginalStyles) {
           if (img && img.nodeType === Node.ELEMENT_NODE) {
-            // 恢复原始的onmouseover处理器
+            // 移除事件拦截器
+            const interceptor = this.eventInterceptors.get(img);
+            if (interceptor) {
+              interceptor.mouseEvents.forEach((eventType) => {
+                img.removeEventListener(eventType, interceptor.stopEvent, true);
+              });
+              this.eventInterceptors.delete(img);
+            }
+
+            // 恢复原始的事件处理器
             img.onmouseover = originalData.onmouseover || null;
+            img.onmouseenter = originalData.onmouseenter || null;
+            img.onmouseleave = originalData.onmouseleave || null;
+            img.onmousemove = originalData.onmousemove || null;
 
             // 恢复原始的pointer-events样式
             if (originalData.pointerEvents) {
@@ -293,7 +485,6 @@
 
             // 如果原始有style属性，恢复它
             if (originalData.style) {
-              // 保留我们添加的其他样式，只移除pointer-events
               const originalStyle = originalData.style;
               img.setAttribute("style", originalStyle);
             }
@@ -305,26 +496,36 @@
           }
         }
 
-        // 清空存储的样式信息
+        // 清空存储的样式信息和拦截器
         this.imageOriginalStyles.clear();
+        this.eventInterceptors.clear();
 
         // 处理没有保存在map中的图片
         const remainingImages = document.querySelectorAll(
           "img[data-mouseover-removed]"
         );
         remainingImages.forEach((img) => {
+          // 尝试移除可能存在的拦截器
+          const interceptor = this.eventInterceptors.get(img);
+          if (interceptor) {
+            interceptor.mouseEvents.forEach((eventType) => {
+              img.removeEventListener(eventType, interceptor.stopEvent, true);
+            });
+          }
           img.style.removeProperty("pointer-events");
           delete img.dataset.mouseoverRemoved;
           processedCount++;
         });
 
         this.imageMouseoverRemoved = false;
-        this.showFeedback(`🌌 已恢复 ${processedCount} 个图片的悬浮事件`);
+        showToast &&
+          this.showFeedback(`🌌 已恢复 ${processedCount} 个图片的悬浮事件`);
       } catch (e) {
         console.error("恢复图片悬浮事件时出错:", e);
-        this.showFeedback(
-          `⚠️ 恢复图片悬浮事件时出现错误: ${e.message || "未知错误"}`
-        );
+        showToast &&
+          this.showFeedback(
+            `⚠️ 恢复图片悬浮事件时出现错误: ${e.message || "未知错误"}`
+          );
       }
     }
 
@@ -376,7 +577,7 @@
       }
 
       // 同时移除图片的悬浮事件
-      this.removeAllImageMouseover();
+      // this.removeAllImageMouseover(false);
     }
 
     showAllFloaters() {
@@ -422,7 +623,7 @@
       }
 
       // 同时恢复图片的悬浮事件
-      this.restoreAllImageMouseover();
+      // this.restoreAllImageMouseover(false);
     }
 
     tempHideFloaters() {
@@ -516,6 +717,13 @@
 
   function insertFloaterComponent() {
     try {
+      // 检查是否已经存在组件实例，避免重复创建
+      const existingInstance = document.querySelector("disable-floater");
+      if (existingInstance) {
+        console.log("DisableFloater 组件实例已存在，跳过创建");
+        return;
+      }
+
       // 创建组件实例
       const floater = document.createElement("disable-floater");
       // 插入到HTML标签的最末尾
