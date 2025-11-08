@@ -1,17 +1,18 @@
 // ==UserScript==
 // @name         悬浮元素控制器
 // @namespace    https://github.com/qinhua/tampermonkey-userscripts/tree/main/disable-floater
-// @version      1.1
+// @version      1.0.0
+// @tag          utilities
 // @description  手动控制浏览器插件的悬浮元素，避免影响网页浏览
 // @author       Marek Qin
-// @match        *://*/*
+// @match        *://*/
+// @include      *
 // @icon         https://raw.githubusercontent.com/qinhua/tampermonkey-userscripts/refs/heads/main/disable-floater/logo.png
 // @grant        GM_addStyle
 // @grant        unsafeWindow
 // @noframes
 // @license      MIT
 // @downloadURL https://raw.githubusercontent.com/qinhua/tampermonkey-userscripts/refs/heads/main/disable-floater/index.js
-// @updateURL https://raw.githubusercontent.com/qinhua/tampermonkey-userscripts/refs/heads/main/disable-floater/index.js
 // ==/UserScript==
 
 (function () {
@@ -39,7 +40,9 @@
         "doubao-ai-csui",
         "floating-lens-root",
         "alibaba-lens-root",
-        "#market-mate-for-1688"
+        "#market-mate-for-1688",
+        ".floating-ball",
+        "#tobeesx-fixed-node"
         // "div[data-id='kphldkppgfpjadpabfkghmjbhpcmgpdg']" // 按插件 id 选择
       ];
 
@@ -109,10 +112,10 @@
 
       // 创建控制面板内容
       this.container.innerHTML = `
-        <button class="disable-floater-btn" id="btn-hide" title="隐藏悬浮元素">🚫</button>
-        <button class="disable-floater-btn" id="btn-temp-hide" title="临时隐藏5秒">⏱️</button>
-        <button class="disable-floater-btn" id="btn-show" title="显示悬浮元素">👁️</button>
-        <button class="disable-floater-btn" id="btn-toggle-mouseover" title="移除图片悬浮事件">🌠</button>
+        <div class="disable-floater-btn" id="btn-hide" title="隐藏悬浮元素">🚫</div>
+        <div class="disable-floater-btn" id="btn-temp-hide" title="临时隐藏5秒">⏱️</div>
+        <div class="disable-floater-btn" id="btn-show" title="显示悬浮元素">👁️</div>
+        <div class="disable-floater-btn" id="btn-toggle-mouseover" title="移除图片悬浮事件">🌠</div>
       `;
     }
 
@@ -145,6 +148,8 @@
           cursor: pointer;
           width: 24px;
           height: 24px;
+          text-align: center;
+          line-height: 24px;
           color: white;
           font-size: 12px;
           border: none;
@@ -718,10 +723,10 @@
       const controller = new DisableFloater(container);
 
       // 插入到页面
-      if (document.body) {
-        document.body.appendChild(container);
-      } else if (document.documentElement) {
+      if (document.documentElement) {
         document.documentElement.appendChild(container);
+      } else if (document.body) {
+        document.body.appendChild(container);
       } else {
         // 如果 body 和 documentElement 都不存在，等待一下再试
         window.__disableFloaterInitialized = false; // 重置标记，允许重试
