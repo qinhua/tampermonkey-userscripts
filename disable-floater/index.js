@@ -5,7 +5,7 @@
 // @description  手动控制浏览器插件的悬浮元素 - 使用Web Components封装，避免样式冲突
 // @author       Marek Qin
 // @match        *://*/*
-// @icon         https://github.com/qinhua/tampermonkey-userscripts/blob/main/disable-floater/logo.png
+// @icon         https://raw.githubusercontent.com/qinhua/tampermonkey-userscripts/refs/heads/main/disable-floater/logo.png
 // @grant        GM_addStyle
 // @license      MIT
 // ==/UserScript==
