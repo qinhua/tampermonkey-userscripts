@@ -52,3 +52,8 @@ logs/
 .env.local
 .env.*.local
 
+# Node.js dependencies
+node_modules/
+package-lock.json
+yarn.lock
+

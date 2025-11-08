@@ -9,7 +9,36 @@
 **安装方式：**
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 浏览器扩展
-2. 脚本链接：https://raw.githubusercontent.com/qinhua/tampermonkey-userscripts/refs/heads/main/[脚本目录]/index.js
+2. 脚本内容：https://raw.githubusercontent.com/qinhua/tampermonkey-userscripts/refs/heads/main/[脚本目录]/index.js
+
+## 🛠️ 开发与构建
+
+本项目使用 Babel 将 ES6 源代码编译为 ES5 兼容代码，以支持 YouTube 等使用 ES5 适配器的网站。
+
+### 开发环境设置
+
+```bash
+# 安装依赖
+npm install
+
+# 构建所有脚本
+npm run build
+
+# 构建指定脚本
+node build.js disable-floater
+
+# 监听模式（自动重新构建）
+node build.js disable-floater --watch
+```
+
+### 项目结构
+
+- `disable-floater/src/index.js` - ES6 源代码（可编辑）
+- `disable-floater/index.js` - 编译后的 ES5 代码（自动生成）
+
+**注意**：请只编辑 `src/` 目录下的源代码，不要直接修改编译后的文件。
+
+详细构建说明请查看 [BUILD.md](BUILD.md)
 
 ## 🚀 快速开始
 
